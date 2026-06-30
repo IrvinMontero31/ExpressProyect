@@ -3,7 +3,7 @@ const router = express.Router();
 
 // Almacenamiento temporal en memoria
 let users = [
-  { id: 1, usuario: 'admin',   password: 'admin123',  rol: 'administrador' },
+  { id: 1, usuario: 'irvin',   password: 'admin123',  rol: 'administrador' },
   { id: 2, usuario: 'jlopez',  password: 'pass456',   rol: 'editor' },
   { id: 3, usuario: 'mgarcia', password: 'secret789', rol: 'lector' },
 ];
