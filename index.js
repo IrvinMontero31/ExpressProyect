@@ -13,7 +13,7 @@ app.get('/', (req, res) => {
 app.use('/api/users', usersRouter);
 
 app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`Servidor corriendo en http://10.168.125.180:${PORT}`);
 });
 
 module.exports = app;
