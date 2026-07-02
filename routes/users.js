@@ -1,99 +1,100 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../models/User');
 
-// Almacenamiento temporal en memoria
-let users = [
-  { id: 1, usuario: 'irvin',   password: 'admin123',  rol: 'administrador' },
-  { id: 2, usuario: 'julian',  password: 'pass456',   rol: 'editor' },
-  { id: 3, usuario: 'mgarcia', password: 'secret789', rol: 'lector' },
-];
-
-let nextId = 4;
-
-// GET /api/users — lista todos los usuarios
-router.get('/', (req, res) => {
-  const publicUsers = users.map(({ password, ...rest }) => rest);
-  res.json(publicUsers);
+// GET /api/users — lista todos los usuarios (sin password)
+router.get('/', async (req, res) => {
+  try {
+    const users = await User.find().select('-password');
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener usuarios' });
+  }
 });
 
 // GET /api/users/:id — obtiene un usuario por id
-router.get('/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  const user = users.find(u => u.id === id);
-
-  if (!user) {
-    return res.status(404).json({ error: `Usuario con id ${id} no encontrado` });
+router.get('/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: `Usuario con id ${req.params.id} no encontrado` });
+    }
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener el usuario' });
   }
-
-  const { password, ...publicUser } = user;
-  res.json(publicUser);
 });
 
 // POST /api/users — crea un nuevo usuario
-router.post('/', (req, res) => {
-  const { usuario, password, rol } = req.body;
+router.post('/', async (req, res) => {
+  try {
+    const { usuario, password, rol } = req.body;
 
-  if (!usuario || !password || !rol) {
-    return res.status(400).json({ error: 'Los campos usuario, password y rol son requeridos' });
+    if (!usuario || !password || !rol) {
+      return res.status(400).json({ error: 'Los campos usuario, password y rol son requeridos' });
+    }
+
+    const newUser = await User.create({ usuario, password, rol });
+    const { password: _pwd, ...publicUser } = newUser.toObject();
+    res.status(201).json(publicUser);
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ error: `El usuario '${req.body.usuario}' ya existe` });
+    }
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Error al crear el usuario' });
   }
-
-  const existe = users.find(u => u.usuario === usuario);
-  if (existe) {
-    return res.status(409).json({ error: `El usuario '${usuario}' ya existe` });
-  }
-
-  const newUser = { id: nextId++, usuario, password, rol };
-  users.push(newUser);
-
-  const { password: _pwd, ...publicUser } = newUser;
-  res.status(201).json(publicUser);
 });
 
 // PUT /api/users/:id — actualiza un usuario existente
-router.put('/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  const index = users.findIndex(u => u.id === id);
+router.put('/:id', async (req, res) => {
+  try {
+    const { usuario, password, rol } = req.body;
 
-  if (index === -1) {
-    return res.status(404).json({ error: `Usuario con id ${id} no encontrado` });
-  }
-
-  const { usuario, password, rol } = req.body;
-
-  if (!usuario && !password && !rol) {
-    return res.status(400).json({ error: 'Debes enviar al menos un campo a actualizar' });
-  }
-
-  if (usuario && usuario !== users[index].usuario) {
-    const duplicado = users.find(u => u.usuario === usuario);
-    if (duplicado) {
-      return res.status(409).json({ error: `El usuario '${usuario}' ya existe` });
+    if (!usuario && !password && !rol) {
+      return res.status(400).json({ error: 'Debes enviar al menos un campo a actualizar' });
     }
+
+    const updates = {};
+    if (usuario)  updates.usuario  = usuario;
+    if (password) updates.password = password;
+    if (rol)      updates.rol      = rol;
+
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!updated) {
+      return res.status(404).json({ error: `Usuario con id ${req.params.id} no encontrado` });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ error: `El usuario '${req.body.usuario}' ya existe` });
+    }
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Error al actualizar el usuario' });
   }
-
-  users[index] = {
-    ...users[index],
-    ...(usuario   && { usuario }),
-    ...(password  && { password }),
-    ...(rol       && { rol }),
-  };
-
-  const { password: _pwd, ...publicUser } = users[index];
-  res.json(publicUser);
 });
 
 // DELETE /api/users/:id — elimina un usuario
-router.delete('/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  const index = users.findIndex(u => u.id === id);
-
-  if (index === -1) {
-    return res.status(404).json({ error: `Usuario con id ${id} no encontrado` });
+router.delete('/:id', async (req, res) => {
+  try {
+    const deleted = await User.findByIdAndDelete(req.params.id).select('-password');
+    if (!deleted) {
+      return res.status(404).json({ error: `Usuario con id ${req.params.id} no encontrado` });
+    }
+    res.json({ message: 'Usuario eliminado', usuario: deleted });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar el usuario' });
   }
-
-  const [deleted] = users.splice(index, 1);
-  const { password, ...publicUser } = deleted;
-  res.json({ message: 'Usuario eliminado', usuario: publicUser });
 });
 
 module.exports = router;
